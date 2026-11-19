@@ -2,9 +2,7 @@ import express from "express";
 const app = express();
 const PORT = 3000
 
-//sprint 1, 2 e 3 -----------
-
-function Listarmensagem() { return mensagens; }
+//sprint 1, 2, 3 e 4 -----------
 
 app.get("/", (req, res) => {
     res.send ("Servidor rodando! 🚀")
@@ -49,9 +47,9 @@ app.get('/ajuda', (req, res) => {
     res.json(orientacoes);
 });
 
-app.get("/mensagens", (req, res) => {
-    res.json(Listarmensagem());
-});
+function Listarmensagem() {
+    return mensagens;
+}
 
 const mensagens = [
     { id: 1, usuario: 'Ana', texto: 'Bom dia!' },
@@ -60,6 +58,10 @@ const mensagens = [
     { id: 4, usuario: 'Lucas', texto: 'Como vai?' },
     { id: 5, usuario: 'Carla', texto: 'Até logo!' },
 ];
+
+app.get('/mensagens', (req, res) => {
+    res.json(Listarmensagem());
+});
 
 function consultar (falhar = false) {
     return new promisse((resolve, reject) => {
@@ -96,8 +98,6 @@ app.get('/mensagens-erro', async (req, res) => {
         });
     }
 });
-
-// sprint 04 -------------
 
 app.get('/mensagens', async (req, res) => {
     try {
@@ -169,5 +169,33 @@ app.get('/gravar-mensagem-correta', (req, res) => {
         });
 });
 
-app.listen(PORT, "0.0.0.0", () => console.log(`Servidor em http://localhost:${PORT}`));
+// sprint 5 ---------
+import { lerMensagens, salvarMensagens } from './store';
+app.use(express.json())
 
+// Serializa gravações dentro deste único processo Node.js.
+let fila = Promise.resolve();
+app.post("/mensagens", (req, res) => {
+  const { usuario, texto } = req.body ?? {};
+  if (typeof usuario !== "string" || !usuario.trim() ||
+      typeof texto !== "string" || !texto.trim()) {
+    return res.status(400).json({ erro: "Informe usuário e mensagem." });
+  }
+  if (usuario.trim().length > 40 || texto.trim().length > 500) {
+    return res.status(400).json({ erro: "Nome ou mensagem muito longos." });
+  }
+  const tarefa = fila.then(async () => {
+    const lista = await lerMensagens();
+    const id = lista.reduce((maior, m) => Math.max(maior, Number(m.id) || 0), 0) + 1;
+    const nova = { id, usuario: usuario.trim(), texto: texto.trim(), data: new Date().toISOString() };
+    await salvarMensagens([...lista, nova]);
+    return nova;
+  });
+  fila = tarefa.catch(() => {}); // mantém a fila utilizável após uma falha
+  tarefa.then(nova => res.status(201).json(nova)).catch(erro => {
+    console.error(erro);
+    res.status(500).json({ erro: "Não foi possível salvar a mensagem." });
+  });
+});
+
+app.listen(PORT, "0.0.0.0", () => console.log(`Servidor em http://localhost:${PORT}`));
